@@ -1,5 +1,5 @@
 use crate::*;
-
+use std::error::Error;
 
 use itertools::Itertools;
 use calamine::{Reader, open_workbook, Xlsx, DataType};
@@ -39,12 +39,59 @@ pub fn get_header(h: Option<&DataType>) -> String{
 
 }
 
-pub async fn insert_trade(client: &tokio_postgres::Client, trade: &trades::Trade) -> Result<(), Error> {
+pub async fn insert_trade(client: &tokio_postgres::Client, trade: &trades::Trade) -> Result<(), Box<dyn Error>> {
     info!("{:?}, {:?}", client, trade);
+    let statement = client.prepare("INSERT INTO trades (
+    	filename,
+    	filehash,
+    	row,
+    	account_name,
+    	account_number,
+    	security_description,
+    	security_ticker,
+    	asset_class,
+    	security_type,
+    	tx_type,
+    	cusip,
+    	price,
+    	quantity,
+    	commission,
+    	fee,
+    	principal,
+    	net_amount,
+    	trade_date,
+    	settlement_date,
+    	broker,
+    	trader
+    	) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)").await?;
+
+    client.execute(&statement,&[
+    	&trade.filename, 
+    	&trade.filehash,
+    	&trade.row,
+    	&trade.account_name,
+    	&trade.account_number,
+    	&trade.securtiy_description,
+    	&trade.security_ticker,
+    	&trade.asset_class,
+    	&trade.security_type,
+    	&trade.tx_type,
+    	&trade.cusip,
+    	&trade.price,
+    	&trade.quantity,
+    	&trade.commission,
+    	&trade.fee,
+    	&trade.principal,
+    	&trade.net_amount,
+    	&trade.trade_date,
+    	&trade.settlement_date,
+    	&trade.broker,
+    	&trade.trader
+    	]).await?;
 	Ok(())
 }
 
-pub async fn parse(client: &tokio_postgres::Client) -> Result<(), Error> {
+pub async fn parse(client: &tokio_postgres::Client) -> Result<(), Box<dyn Error>> {
      let ifiles = vec!["/tmp/2019-09.xlsx","/tmp/2019-10.xlsx","/tmp/2019-11.xlsx"];
 
      for ifile in ifiles {
@@ -143,11 +190,10 @@ pub async fn parse(client: &tokio_postgres::Client) -> Result<(), Error> {
                     let this_bullshit_trade_date = excel_bullshit + ChronoDuration::days(istring_trade_date);
                     let this_bullshit_settlment_date = excel_bullshit + ChronoDuration::days(istring_settlement_date);
 
-
                     let trade = trades::Trade {
                     	filename: ifile.to_string(),
                     	filehash: utils::sha_fmt(ifile).unwrap_or("failedhash".to_string()),
-                    	row: i,
+                    	row: i as i32,
                         account_name: r[anap].get_string().unwrap_or("ALTP ERROR NO DATA PROVIDED").to_string(),
                         account_number: r[anmp].get_string().unwrap_or("ALTP ERROR NO DATA PROVIDED").to_string(),
                         securtiy_description: r[sdp].get_string().unwrap_or("ALTP ERROR NO DATA PROVIDED").to_string(),
@@ -164,8 +210,8 @@ pub async fn parse(client: &tokio_postgres::Client) -> Result<(), Error> {
                         fee: r[feep].get_float().unwrap_or(0.),
                         principal: r[princep].get_float().unwrap_or(0.),
                         net_amount: r[nap].get_float().unwrap_or(0.),
-                        trade_date: this_bullshit_trade_date.to_string(),
-                        settlement_date: this_bullshit_settlment_date.to_string(),
+                        trade_date: this_bullshit_trade_date.timestamp(),
+                        settlement_date: this_bullshit_settlment_date.timestamp(),
                     };
 
                     info!("{:?}", trade);

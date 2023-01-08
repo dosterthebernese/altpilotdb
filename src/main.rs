@@ -23,40 +23,6 @@ async fn get_client() -> Result<tokio_postgres::Client, Error> {
     Ok(client)
 }
 
-async fn build_trades_table(client: &tokio_postgres::Client) -> Result<(), Error> {
-
-    // Now we can execute a simple statement that just returns its parameter.
-    client.query("CREATE TABLE trades (id SERIAL PRIMARY KEY,
-        filename VARCHAR NOT NULL,
-        filehash VARCHAR NOT NULL,
-        row INT NOT NULL,
-        account_name VARCHAR NOT NULL,
-        account_number VARCHAR NOT NULL,
-        security_ticker VARCHAR NOT NULL,
-        security_description VARCHAR NOT NULL,
-        asset_class VARCHAR NOT NULL,
-        security_type VARCHAR NOT NULL,
-        tx_type VARCHAR NOT NULL,
-        price FLOAT8 NOT NULL,
-        quantity FLOAT8 NOT NULL,
-        commission FLOAT8 NOT NULL,
-        broker VARCHAR NOT NULL,
-        trader VARCHAR NOT NULL,
-        trade_date TIMESTAMPTZ NOT NULL,
-        settlement_date TIMESTAMPTZ NOT NULL
-        )", &[]).await?;
-
-    Ok(())
-}
-
-async fn drop_trades_table(client: &tokio_postgres::Client) -> Result<(), Error> {
-
-    // Now we can execute a simple statement that just returns its parameter.
-    client.query("drop TABLE trades", &[]).await?;
-
-    Ok(())
-}
-
 
 // async fn postgres_stuff() -> Result<(), Error> {
 
@@ -108,14 +74,14 @@ pub async fn main() {
         info!(args.name, "You passed: ");
         match args.name.as_ref() {
             "build" => {
-                match &build_trades_table(&client).await {
+                match &trades::build_trades_table(&client).await {
                     Ok(_) => info!("I built the trades table."),
                     Err(err) => error!("I failed to build the trades table.  The reason as per postgres is\n: {:?}\n\n", err),
 
                 }
             },
             "drop" => {
-                match &drop_trades_table(&client).await {
+                match &trades::drop_trades_table(&client).await {
                     Ok(_) => info!("I dropped the trades table."),
                     Err(err) => error!("I failed to drop the trades table.  The reason as per postgres is\n: {:?}\n\n", err),
 
