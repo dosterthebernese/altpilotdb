@@ -94,6 +94,13 @@ pub async fn main() {
 
                 }
             },
+            "fetch" => {
+                match &trades::get_all_trades(&client).await {
+                    Ok(_) => info!("I fetched the trades table."),
+                    Err(err) => error!("I failed to fetch the trades table.  The reason as per postgres is\n: {:?}\n\n", err),
+
+                }
+            },
 
 
             _ => info!("I have no idea what you're telling me to do.")
