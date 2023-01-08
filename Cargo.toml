@@ -1,0 +1,27 @@
+[package]
+name = "nav"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tokio = {version = "1.24.1", features = ["full"] }
+tokio-postgres = "0.7.7"
+clap = { version = "4.0.32", features = ["derive"] }
+tracing = "0.1"
+base64 = "0.13.0"
+calamine = "0.19.1"
+itertools = "0.10.5"
+chrono = "0.4.23"
+data-encoding = "2.3.3"
+ring = "0.16.20"
+serde = "1.0.147"
+serde_derive = "1.0.147"
+serde_json = "1.0.68"
+serde_with = "1.11.0"
+
+[dependencies.tracing-subscriber]
+version = "0.3.15"
+features = ["env-filter"]
+
