@@ -12,6 +12,8 @@ grant all privileges on account_summaries to tradellama;
 grant all privileges on account_summaries_id_seq to tradellama; 
 grant all privileges on security_summaries to tradellama; 
 grant all privileges on security_summaries_id_seq to tradellama; 
+grant all privileges on chains to tradellama; 
+grant all privileges on chains_id_seq to tradellama; 
 
 
 make sure this is running

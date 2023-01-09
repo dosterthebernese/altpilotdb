@@ -131,10 +131,20 @@ pub async fn main() {
                 }
             },
             "summarizern" => {
+               //let alt_client = get_alt_remote_client().await.unwrap();
+               let alt_client = get_alt_local_client().await.unwrap();
+
+                match &trades::summarize(&client,&alt_client,"rivernorth").await {
+                    Ok(_) => info!("I fetched the trades table for rn."),
+                    Err(err) => error!("I failed to fetch the trades table for rn.  The reason as per postgres is\n: {:?}\n\n", err),
+                }
+            },
+
+            "chainrn" => {
                let alt_client = get_alt_remote_client().await.unwrap();
                //let alt_client = get_alt_local_client().await.unwrap();
 
-                match &trades::summarize(&client,&alt_client,"rivernorth").await {
+                match &trades::chain(&client,&alt_client,"rivernorth").await {
                     Ok(_) => info!("I fetched the trades table for rn."),
                     Err(err) => error!("I failed to fetch the trades table for rn.  The reason as per postgres is\n: {:?}\n\n", err),
                 }

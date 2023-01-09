@@ -1,5 +1,8 @@
+use bson::oid::ObjectId;
+use chrono::NaiveDateTime;
 use tokio_postgres::Row;
-use std::collections::{HashMap};
+use std::collections::{HashSet, HashMap};
+use itertools::Itertools;
 use serde::{Serialize,Deserialize};
 use tokio_postgres::{Error};
 use tracing::{info, debug};
@@ -27,6 +30,12 @@ pub struct SecuritySummary {
     tx_type: String,
     security_ticker: String,
     calc: f64
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct TradeChain {
+    pub head: Trade,
+    pub chain: Vec<Trade>
 }
 
 
@@ -87,6 +96,18 @@ impl From<Row> for Trade {
     }
 }
 
+impl Trade {
+    pub fn is_chained(&self, other_trade: &Trade) -> bool {
+        if self.security_ticker == other_trade.security_ticker &&
+        self.trade_date <= other_trade.trade_date &&
+        self.settlement_date > other_trade.trade_date  {
+            true        
+        } else {
+            false
+        }
+
+    }
+}
 pub async fn build_trades_table(client: &tokio_postgres::Client) -> Result<(), Error> {
 
     // Now we can execute a simple statement that just returns its parameter.
@@ -129,7 +150,7 @@ pub async fn drop_trades_table(client: &tokio_postgres::Client) -> Result<(), Er
 
 pub async fn get_all_trades(client: &tokio_postgres::Client, handle: &str) -> Result<Vec<Trade>, Error> {
 
-    let rows = client.query("SELECT * FROM trades WHERE handle = $1", &[&handle]).await;
+    let rows = client.query("SELECT * FROM trades WHERE handle = $1 ORDER BY id", &[&handle]).await;
     let mut v: Vec<Trade> = Vec::new();
 
     match rows {
@@ -146,9 +167,128 @@ pub async fn get_all_trades(client: &tokio_postgres::Client, handle: &str) -> Re
     Ok(v)
 }
 
+
+async fn clean_chains(client: &tokio_postgres::Client, handle: &str) -> Result<(), Error> {
+
+    let statement = client.prepare("delete from chains where handle = $1").await?;
+    client.execute(&statement,&[&handle]).await?;
+
+    Ok(())
+
+}
+
+async fn insert_chain(client: &tokio_postgres::Client, chain: &TradeChain) -> Result<(), Error> {
+
+    let chain_id = ObjectId::new().to_string();
+
+
+    let statement = client.prepare("INSERT INTO chains (
+        handle,
+        filename,
+        filehash,
+        row,
+        chain_id,
+        head,
+        security_ticker,
+        account_name,
+        tx_type,
+        price,
+        quantity,
+        commission,
+        net_amount,
+        broker,
+        trade_date,
+        settlement_date,
+        inserted_at,
+        updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)").await?;
+
+    info!("{:?}", &chain.head);
+
+    client.execute(&statement,&[
+        &chain.head.handle,
+        &chain.head.filename,
+        &chain.head.filehash,
+        &chain.head.row,
+        &chain_id,
+        &true,
+        &chain.head.security_ticker,
+        &chain.head.account_name,
+        &chain.head.tx_type,
+        &chain.head.price.abs(),
+        &chain.head.quantity.abs(),
+        &chain.head.commission.abs(),
+        &chain.head.net_amount.abs(),
+        &chain.head.broker,
+        &NaiveDateTime::from_timestamp_opt(chain.head.trade_date,0),
+        &NaiveDateTime::from_timestamp_opt(chain.head.settlement_date,0),
+        &SystemTime::now(),
+        &SystemTime::now()
+        ]).await?;
+
+
+
+    for t in &chain.chain {
+
+
+        let statement = client.prepare("INSERT INTO chains (
+            handle,
+            filename,
+            filehash,
+            row,
+            chain_id,
+            head,
+            security_ticker,
+            account_name,
+            tx_type,
+            price,
+            quantity,
+            commission,
+            net_amount,
+            broker,
+            trade_date,
+            settlement_date,
+            inserted_at,
+            updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)").await?;
+
+        info!("{:?}", &chain.head);
+
+        client.execute(&statement,&[
+            &t.handle,
+            &t.filename,
+            &t.filehash,
+            &t.row,
+            &chain_id,
+            &false,
+            &t.security_ticker,
+            &t.account_name,
+            &t.tx_type,
+            &t.price.abs(),
+            &t.quantity.abs(),
+            &t.commission.abs(),
+            &t.net_amount.abs(),
+            &t.broker,
+            &NaiveDateTime::from_timestamp_opt(t.trade_date,0),
+            &NaiveDateTime::from_timestamp_opt(t.settlement_date,0),
+            &SystemTime::now(),
+            &SystemTime::now()
+            ]).await?;
+
+
+    }
+
+
+    Ok(())
+
+
+
+}
+
+
+
 async fn insert_file_summary(client: &tokio_postgres::Client, summary: &FileSummary) -> Result<(), Error> {
 
-    info!("about to execute insert statement on alt pilot");
     let statement = client.prepare("INSERT INTO file_summaries (
         handle,
         filename,
@@ -158,7 +298,6 @@ async fn insert_file_summary(client: &tokio_postgres::Client, summary: &FileSumm
         updated_at
         ) VALUES ($1, $2, $3, $4, $5, $6)").await?;
 
-    info!("about to execute insert statement on alt pilot");
     client.execute(&statement,&[
         &summary.handle,
         &summary.filename, 
@@ -173,7 +312,6 @@ async fn insert_file_summary(client: &tokio_postgres::Client, summary: &FileSumm
 
 async fn insert_account_summary(client: &tokio_postgres::Client, summary: &AccountSummary) -> Result<(), Error> {
 
-    info!("about to execute insert statement on alt pilot");
     let statement = client.prepare("INSERT INTO account_summaries (
         handle,
         tx_type,
@@ -183,7 +321,6 @@ async fn insert_account_summary(client: &tokio_postgres::Client, summary: &Accou
         updated_at
         ) VALUES ($1, $2, $3, $4, $5, $6)").await?;
 
-    info!("about to execute insert statement on alt pilot");
     client.execute(&statement,&[
         &summary.handle,
         &summary.tx_type, 
@@ -198,7 +335,6 @@ async fn insert_account_summary(client: &tokio_postgres::Client, summary: &Accou
 
 async fn insert_security_summary(client: &tokio_postgres::Client, summary: &SecuritySummary) -> Result<(), Error> {
 
-    info!("about to execute insert statement on alt pilot");
     let statement = client.prepare("INSERT INTO security_summaries (
         handle,
         tx_type,
@@ -208,7 +344,6 @@ async fn insert_security_summary(client: &tokio_postgres::Client, summary: &Secu
         updated_at
         ) VALUES ($1, $2, $3, $4, $5, $6)").await?;
 
-    info!("about to execute insert statement on alt pilot");
     client.execute(&statement,&[
         &summary.handle,
         &summary.tx_type, 
@@ -277,6 +412,55 @@ pub async fn summarize(client: &tokio_postgres::Client, alt_client: &tokio_postg
         };
         insert_security_summary(&alt_client, &s).await?;
         info!("{:?}", s);
+    }
+
+    Ok(())
+
+}
+
+pub async fn chain(client: &tokio_postgres::Client, alt_client: &tokio_postgres::Client, handle: &str) -> Result<(), Error> {
+
+    info!("first I'll clean up for {:?}", handle);
+    clean_chains(alt_client, handle).await?;
+
+    let mut payload: Vec<TradeChain> = Vec::new();
+
+    let mut already_in_a_chain: HashSet<i32> = HashSet::new();
+
+    let all_trades = get_all_trades(client, handle).await?;
+    for t in &all_trades {
+        let mut ch: Vec<Trade> = Vec::new();
+        for t2 in &all_trades {
+            // we do this because if already in a chain, i don't need to make an inner chain
+            if !already_in_a_chain.contains(&t2.id.unwrap()) {
+                if t.is_chained(&t2) {
+                    ch.push(t2.clone());
+                    already_in_a_chain.insert(t2.id.unwrap());
+                }                
+            }
+        }
+
+        let tx_types: Vec<String> = ch.iter().map(|x| x.tx_type.clone()).collect();
+        info!("{:?}", tx_types);
+        let tx_types_u: Vec<_> = tx_types.into_iter().unique().collect();
+        info!("{:?}", tx_types_u);
+
+        if ch.len() > 0 && tx_types_u.len() > 1 { //there's distinct tx type greater than 2
+            let tc = TradeChain {
+                head: t.clone(),
+                chain: ch
+            };
+            payload.push(tc);            
+        }
+
+    }
+
+    for c in payload {
+        // info!("HEAD {:?} {:?} {:?} {:?} {:?}", c.head.id, c.head.security_ticker, c.head.tx_type, c.head.trade_date, c.head.settlement_date);
+        // for cm in c.chain {
+        //     info!("MEMB {:?} {:?} {:?} {:?} {:?}", cm.id, cm.security_ticker, cm.tx_type, cm.trade_date, cm.settlement_date);
+        // }
+        insert_chain(alt_client, &c).await?;
     }
 
     Ok(())
