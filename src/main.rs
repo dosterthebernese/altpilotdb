@@ -23,6 +23,42 @@ async fn get_client() -> Result<tokio_postgres::Client, Error> {
     Ok(client)
 }
 
+async fn get_alt_local_client() -> Result<tokio_postgres::Client, Error> {
+   // Connect to the database.
+    let (client, connection) =
+        tokio_postgres::connect("host=localhost user=postgres password='postgres' dbname='altpilot_dev'", NoTls).await?;
+
+    // The connection object performs the actual communication with the database,
+    // so spawn it off to run on its own.
+    tokio::spawn(async move {
+        if let Err(e) = connection.await {
+            eprintln!("connection error: {}", e);
+            println!("connection error: {}", e);
+        }
+    });
+    Ok(client)
+}
+
+async fn get_alt_remote_client() -> Result<tokio_postgres::Client, Error> {
+
+
+//postgres://green_feather_3408:czMSpiovqNTgssS@top2.nearest.of.green-feather-3408-db.internal:5432/green_feather_3408?sslmode=disable
+
+   // Connect to the database.
+    let (client, connection) =
+        tokio_postgres::connect("host=localhost port=15432 user=tradellama password='puppyjuice06!' dbname='green_feather_3408'", NoTls).await?;
+
+    // The connection object performs the actual communication with the database,
+    // so spawn it off to run on its own.
+    tokio::spawn(async move {
+        if let Err(e) = connection.await {
+            eprintln!("connection error: {}", e);
+            println!("connection error: {}", e);
+        }
+    });
+    Ok(client)
+}
+
 
 // async fn postgres_stuff() -> Result<(), Error> {
 
@@ -87,18 +123,20 @@ pub async fn main() {
 
                 }
             },
-            "parse" => {
+            "parsern" => {
                 match &rivernorth::parse(&client).await {
                     Ok(_) => info!("I parsed the usual river north files."),
                     Err(err) => error!("I failed to pare the usual river north files.  The reason as per river north's parser is\n: {:?}\n\n", err),
 
                 }
             },
-            "fetch" => {
-                match &trades::get_all_trades(&client).await {
-                    Ok(_) => info!("I fetched the trades table."),
-                    Err(err) => error!("I failed to fetch the trades table.  The reason as per postgres is\n: {:?}\n\n", err),
+            "summarizern" => {
+               let alt_client = get_alt_remote_client().await.unwrap();
+               //let alt_client = get_alt_local_client().await.unwrap();
 
+                match &trades::summarize(&client,&alt_client,"rivernorth").await {
+                    Ok(_) => info!("I fetched the trades table for rn."),
+                    Err(err) => error!("I failed to fetch the trades table for rn.  The reason as per postgres is\n: {:?}\n\n", err),
                 }
             },
 
@@ -113,13 +151,28 @@ pub async fn main() {
 #[cfg(test)]
 mod tests {
 
-//    use super::*;
+    use super::*;
 
      
     ///probably should not drop create but for dev wtf
     #[tokio::test]
-    async fn can_connect_local_and_drop_and_create_trades_table() {
+    async fn can_connect_locals() {
+ 
+        let client = get_client().await.unwrap();
+        let alt_client = get_alt_local_client().await.unwrap();
+        let alt_remote_client = get_alt_remote_client().await.unwrap();
+        println!("{:?}", client);
+        println!("{:?}", alt_client);
+        println!("{:?}", alt_remote_client);
         assert_eq!(1, 1);
+ 
+        let rows = alt_client.query("SELECT email FROM users", &[]).await.unwrap();
+        println!("{:?}", rows);
+
+        let rows = alt_remote_client.query("SELECT filename FROM file_summaries", &[]).await.unwrap();
+        println!("{:?}", rows);
+
+
     }
 
 }

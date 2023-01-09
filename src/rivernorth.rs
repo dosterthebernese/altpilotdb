@@ -42,6 +42,7 @@ pub fn get_header(h: Option<&DataType>) -> String{
 pub async fn insert_trade(client: &tokio_postgres::Client, trade: &trades::Trade) -> Result<(), Box<dyn Error>> {
     info!("{:?}, {:?}", client, trade);
     let statement = client.prepare("INSERT INTO trades (
+    	handle,
     	filename,
     	filehash,
     	row,
@@ -63,9 +64,10 @@ pub async fn insert_trade(client: &tokio_postgres::Client, trade: &trades::Trade
     	settlement_date,
     	broker,
     	trader
-    	) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)").await?;
+    	) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)").await?;
 
     client.execute(&statement,&[
+    	&trade.handle,
     	&trade.filename, 
     	&trade.filehash,
     	&trade.row,
@@ -191,6 +193,8 @@ pub async fn parse(client: &tokio_postgres::Client) -> Result<(), Box<dyn Error>
                     let this_bullshit_settlment_date = excel_bullshit + ChronoDuration::days(istring_settlement_date);
 
                     let trade = trades::Trade {
+                    	id: None,
+                    	handle: "rivernorth".to_string(),
                     	filename: ifile.to_string(),
                     	filehash: utils::sha_fmt(ifile).unwrap_or("failedhash".to_string()),
                     	row: i as i32,
